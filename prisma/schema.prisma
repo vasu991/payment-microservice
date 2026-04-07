@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+model Product {
+  id       String  @id @default(uuid())
+  name     String
+  code     String  @unique
+  isActive Boolean @default(true)
+
+  apiKeys  ApiKey[]
+  users    ProductUser[]
+  plans    ProductPlan[]
+  orders   Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model ApiKey {
+  id        String @id @default(uuid())
+  productId String
+
+  keyName     String
+  keyHash     String  @unique
+  keyPrefix   String
+  environment String  @default("production")
+  permissions String[]
+  rateLimitPerMin Int @default(100)
+
+  isActive   Boolean   @default(true)
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+
+  product    Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rateLimits RateLimitTracker[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([keyPrefix])
+  @@index([productId])
+}
+
+model RateLimitTracker {
+  id           String   @id @default(uuid())
+  apiKeyId     String
+  windowStart  DateTime
+  requestCount Int      @default(0)
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([apiKeyId, windowStart])
+}
+
+model ProductUser {
+  id             String  @id @default(uuid())
+  productId      String
+  externalUserId String
+  email          String?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orders  Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([productId, externalUserId])
+}
+
+model ProductPlan {
+  id          String  @id @default(uuid())
+  productId   String
+  name        String
+  description String?
+  price       Int
+  currency    String      @default("usd")
+  billingType BillingType
+  isActive    Boolean     @default(true)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orders  Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([productId])
+}
+
+model Order {
+  id            String @id @default(uuid())
+  productId     String
+  productUserId String
+  planId        String
+  referenceId   String
+
+  amount   Int
+  currency String      @default("usd")
+  status   OrderStatus @default(CREATED)
+
+  product     Product     @relation(fields: [productId], references: [id])
+  productUser ProductUser @relation(fields: [productUserId], references: [id])
+  plan        ProductPlan @relation(fields: [planId], references: [id])
+  payments    Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([productId, referenceId])
+  @@index([status])
+  @@index([productId])
+}
+
+model Payment {
+  id      String @id @default(uuid())
+  orderId String
+
+  amount   Int
+  method   PaymentMethod
+  status   PaymentStatus
+
+  rawRequest  Json?
+  rawResponse Json?
+
+  order   Order    @relation(fields: [orderId], references: [id])
+  refunds Refund[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model Refund {
+  id        String @id @default(uuid())
+  paymentId String
+
+  amount Int
+  status RefundStatus
+  reason String?
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model IdempotencyKey {
+  id        String @id @default(uuid())
+  productId String
+  key       String
+  method    String
+  path      String
+  requestHash String
+
+  status             IdempotencyStatus @default(IN_PROGRESS)
+  responseStatusCode Int?
+  responseBody       Json?
+  orderId            String?
+  paymentId          String?
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([productId, key, method, path])
+  @@index([expiresAt])
+}
+
+enum OrderStatus {
+  CREATED
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  INITIATED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CARD
+  ACH
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum BillingType {
+  ONE_TIME
+  RECURRING
+}
+
+enum IdempotencyStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}

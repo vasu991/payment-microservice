@@ -4,12 +4,15 @@ import { config } from "dotenv";
 import { defineConfig } from "prisma/config";
 
 // Load environment variables based on NODE_ENV
-const envFile = process.env.env === "prod" ? ".env.production" : ".env.development";
+const envFile = process.env.NODE_ENV === "production" ? ".env.production" : ".env";
 config({ path: `${process.cwd()}/${envFile}` });
 
+const directUrl = process.env["DIRECT_URL"];
 const databaseUrl = process.env["DATABASE_URL"];
-if (!databaseUrl) {
-  throw new Error(`DATABASE_URL is not set. Please check your ${envFile} file.`);
+const urlToUse = directUrl || databaseUrl;
+
+if (!urlToUse) {
+  throw new Error(`Neither DIRECT_URL nor DATABASE_URL is set. Please check your ${envFile} file.`);
 }
 
 export default defineConfig({
@@ -18,6 +21,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: databaseUrl,
+    url: urlToUse,
   },
 });
