@@ -7,3 +7,4 @@ node_modules/
 *.pem
 *.sh
 .DS_Store
+.vscode/
